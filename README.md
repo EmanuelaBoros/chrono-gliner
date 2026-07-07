@@ -7,21 +7,31 @@ It evaluates GLiNER-style open-label NER on HIPE-style historical newspaper data
 The first goal is to compare several zero-shot and prompt-based GLiNER variants against a historical BERT NER baseline.
 
 
-| Model | Label variant | Threshold | Precision | Recall | F1 | loc F1 | org F1 | pers F1 | prod F1 | time F1 | Macro F1 | Weighted F1 |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `ChronoGLiNER-ZS` | `simple` | 0.25 | 0.2326 | **0.5420** | 0.3255 | 0.55 | 0.15 | 0.38 | 0.00 | 0.05 | 0.23 | 0.43 |
-| `ChronoGLiNER-ZS` | `simple` | 0.30 | 0.2467 | 0.5365 | 0.3380 | 0.56 | 0.16 | 0.39 | 0.00 | 0.05 | 0.23 | 0.44 |
-| `ChronoGLiNER-ZS` | `simple` | 0.35 | 0.2597 | 0.5280 | 0.3482 | 0.57 | 0.16 | 0.41 | 0.00 | 0.04 | 0.24 | 0.44 |
-| `ChronoGLiNER-ZS` | `simple` | 0.40 | 0.2735 | 0.5128 | 0.3567 | 0.57 | 0.18 | 0.42 | 0.00 | 0.04 | 0.24 | 0.45 |
-| `ChronoGLiNER-ZS` | `simple` | 0.50 | 0.3082 | 0.4921 | 0.3790 | 0.58 | 0.20 | **0.44** | 0.00 | 0.04 | 0.25 | **0.46** |
-| `ChronoGLiNER-D` | `historical` | 0.25 | **0.3445** | 0.4391 | **0.3861** | 0.53 | 0.19 | 0.43 | 0.00 | **0.10** | **0.25** | 0.44 |
+## ChronoGLiNER Results on HIPE-2020 French Test Set
+
+| Rank | Model | Label variant | Threshold | Precision | Recall | F1 |
+|---:|---|---|---:|---:|---:|---:|
+| 1 | `ChronoGLiNER-D` | `historical_fr` | 0.35 | **0.4574** | 0.3855 | **0.4184** |
+| 2 | `ChronoGLiNER-D` | `historical_fr` | 0.30 | 0.4193 | 0.4050 | 0.4120 |
+| 3 | `ChronoGLiNER-D` | `historical_fr` | 0.40 | 0.4833 | 0.3532 | 0.4082 |
+| 4 | `ChronoGLiNER-D` | `historical` | 0.40 | 0.4541 | 0.3672 | 0.4061 |
+| 5 | `ChronoGLiNER-D` | `historical_fr` | 0.25 | 0.3829 | **0.4294** | 0.4048 |
+| 6 | `ChronoGLiNER-D` | `historical` | 0.35 | 0.4172 | 0.3910 | 0.4036 |
+| 7 | `ChronoGLiNER-D` | `historical` | 0.30 | 0.3823 | 0.4172 | 0.3990 |
+| 8 | `ChronoGLiNER-D` | `historical` | 0.25 | 0.3445 | 0.4391 | 0.3861 |
+| 9 | `ChronoGLiNER-D` | `historical` | 0.50 | 0.5039 | 0.3118 | 0.3853 |
+| 10 | `ChronoGLiNER-ZS` | `simple` | 0.50 | 0.3082 | 0.4921 | 0.3790 |
+| 11 | `ChronoGLiNER-D` | `historical_fr` | 0.50 | **0.5231** | 0.2893 | 0.3725 |
+| 12 | `ChronoGLiNER-ZS` | `simple` | 0.40 | 0.2735 | 0.5128 | 0.3567 |
+| 13 | `ChronoGLiNER-ZS` | `simple` | 0.35 | 0.2597 | 0.5280 | 0.3482 |
+| 14 | `ChronoGLiNER-ZS` | `simple` | 0.30 | 0.2467 | 0.5365 | 0.3380 |
+| 15 | `ChronoGLiNER-ZS` | `simple` | 0.25 | 0.2326 | **0.5420** | 0.3255 |
 
 
-
-| Variant | Name | Description | Current result |
-|---|---|---|---|
-| Zero-shot | `ChronoGLiNER-ZS` | GLiNER used directly with simple labels | Best so far: P=0.2467, R=0.5365, F1=0.3380 at threshold 0.30 |
-| Descriptive labels | `ChronoGLiNER-D` | GLiNER with richer historical label descriptions | Running / TBD |
-| Fine-tuned | `ChronoGLiNER-FT` | GLiNER fine-tuned on HIPE `NE-COARSE-LIT` | Planned |
-| Teacher model | `ChronoGLiNER-Teacher` | Fine-tuned GLiNER used to pseudo-label more historical data | Planned |
-| Student model | `ChronoGLiNER-BERT` | Historical BERT trained on gold + GLiNER pseudo-labels | Planned |
+| Variant | Name | Description | Threshold | Precision | Recall | F1 | Status |
+|---|---|---|---:|---:|---:|---:|---|
+| Zero-shot | `ChronoGLiNER-ZS` | GLiNER used directly with simple labels | 0.50 | 0.3082 | 0.4921 | 0.3790 | Best simple-label result |
+| Descriptive labels | `ChronoGLiNER-D` | GLiNER with richer historical label descriptions | 0.35 | **0.4574** | 0.3855 | **0.4184** | Best prompt-only result with French historical labels |
+| Fine-tuned | `ChronoGLiNER-FT` | GLiNER fine-tuned on HIPE `NE-COARSE-LIT` | TBD | TBD | TBD | TBD | Running / next |
+| Teacher model | `ChronoGLiNER-Teacher` | Fine-tuned GLiNER used to pseudo-label more historical data | TBD | TBD | TBD | TBD | Planned |
+| Student model | `ChronoGLiNER-BERT` | Historical BERT trained on gold + GLiNER pseudo-labels | TBD | TBD | TBD | TBD | Planned |
