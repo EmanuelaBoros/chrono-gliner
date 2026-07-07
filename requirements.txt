@@ -1,0 +1,8 @@
+torch
+transformers
+gliner
+seqeval
+tqdm
+scikit-learn
+huggingface_hub
+pyyaml
