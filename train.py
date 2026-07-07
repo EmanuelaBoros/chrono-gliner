@@ -10,8 +10,6 @@
 # ]
 # ///
 
-import os
-import re
 import json
 import random
 import argparse
@@ -33,7 +31,7 @@ from seqeval.metrics import (
 
 DEFAULT_LABEL_COLUMN = "NE-COARSE-LIT"
 
-DEFAULT_LABELS = [
+DEFAULT_EVAL_LABELS = [
     "person",
     "location",
     "organization",
@@ -48,21 +46,6 @@ DEFAULT_LABELS = [
 
 
 def normalize_ner_label(label: str, keep_scope: bool = False) -> str:
-    """
-    Normalize mixed HIPE / historical NER labels.
-
-    Examples:
-      B-PER       -> B-pers
-      I-ORG       -> I-org
-      B-LOC       -> B-loc
-      B-STREET    -> B-loc
-      B-BUILDING  -> B-loc
-      B-HumanProd -> B-prod
-      B-object    -> B-prod
-      B-work      -> B-prod
-      B-date      -> B-time
-    """
-
     if label in ["O", "_", ""]:
         return "O"
 
@@ -127,7 +110,140 @@ def gliner_to_hipe_label(gliner_label: str) -> Optional[str]:
 
 
 # -------------------------
-# TSV reading
+# Dataset discovery
+# -------------------------
+
+
+def resolve_dataset_dir(
+    data_root: str,
+    dataset: str,
+    language: Optional[str] = None,
+) -> Path:
+    data_root = Path(data_root)
+
+    if language:
+        dataset_dir = data_root / dataset / language
+    else:
+        dataset_dir = data_root / dataset
+
+    if not dataset_dir.exists():
+        raise FileNotFoundError(f"Dataset directory not found: {dataset_dir}")
+
+    return dataset_dir
+
+
+def is_readable_data_file(path: Path) -> bool:
+    if not path.is_file():
+        return False
+
+    if path.name.startswith("."):
+        return False
+
+    ignored_suffixes = {
+        ".json",
+        ".jsonl",
+        ".md",
+        ".txt",
+        ".py",
+        ".DS_Store",
+    }
+
+    if path.suffix in ignored_suffixes:
+        return False
+
+    return True
+
+
+def is_test_file(path: Path) -> bool:
+    name = path.name.lower()
+
+    return "test" in name or name.startswith("test") or name.endswith(".test")
+
+
+def is_train_file(path: Path) -> bool:
+    name = path.name.lower()
+
+    return (
+        "train" in name
+        or name.startswith("train")
+        or name.endswith(".train")
+        or name.endswith("train.fr")
+        or "dev" in name
+        or "valid" in name
+    )
+
+
+def resolve_train_test_files_from_dataset(
+    data_root: str,
+    dataset: str,
+    language: Optional[str] = None,
+    test_file: Optional[str] = None,
+) -> Tuple[List[Path], Path]:
+    dataset_dir = resolve_dataset_dir(
+        data_root=data_root,
+        dataset=dataset,
+        language=language,
+    )
+
+    files = sorted([p for p in dataset_dir.rglob("*") if is_readable_data_file(p)])
+
+    if not files:
+        raise FileNotFoundError(f"No data files found in {dataset_dir}")
+
+    print("=" * 80)
+    print("DATASET DISCOVERY")
+    print("=" * 80)
+    print("Dataset directory:", dataset_dir)
+    print("Found files:")
+    for p in files:
+        print(" -", p)
+
+    if test_file:
+        requested = Path(test_file)
+
+        matches = [
+            p
+            for p in files
+            if p.name == requested.name or str(p).endswith(str(test_file))
+        ]
+
+        if not matches:
+            raise FileNotFoundError(
+                f"Could not find requested test file {test_file} in {dataset_dir}"
+            )
+
+        test_path = matches[0]
+    else:
+        test_candidates = [p for p in files if is_test_file(p)]
+
+        if not test_candidates:
+            raise FileNotFoundError(
+                f"No test file found in {dataset_dir}. "
+                f"Pass it manually with --test_file."
+            )
+
+        if len(test_candidates) > 1:
+            print("Warning: multiple test candidates found. Using first:")
+            for p in test_candidates:
+                print(" -", p)
+
+        test_path = test_candidates[0]
+
+    train_paths = [p for p in files if p != test_path and is_train_file(p)]
+
+    if not train_paths:
+        print("Warning: no explicit train/dev file found.")
+        print("Using all non-test files as training files.")
+        train_paths = [p for p in files if p != test_path]
+
+    if not train_paths:
+        raise FileNotFoundError(f"No training files found in {dataset_dir}")
+
+    return train_paths, test_path
+
+
+# -------------------------
+# HIPE TSV reading
 # -------------------------
 
 
@@ -136,20 +252,6 @@ def read_hipe_tsv(
     label_column: str = DEFAULT_LABEL_COLUMN,
     keep_scope: bool = False,
 ) -> List[Dict]:
-    """
-    Reads a HIPE-style TSV file and returns sentence-level examples.
-
-    Output example:
-    {
-      "tokens": [...],
-      "labels": [...],
-      "misc": [...],
-      "document_id": "...",
-      "date": "...",
-      "source_file": "..."
-    }
-    """
-
     examples = []
 
     current_tokens = []
@@ -241,143 +343,12 @@ def read_hipe_tsv(
     return examples
 
 
-def parse_file_list(files_arg: Optional[str]) -> List[Path]:
-    if not files_arg:
-        return []
-
-    files = []
-    for item in files_arg.split(","):
-        item = item.strip()
-        if item:
-            files.append(Path(item))
-
-    return files
-
-
-def resolve_train_test_files(
-    data_dir: Optional[str],
-    train_files_arg: Optional[str],
-    test_file_arg: str,
-) -> Tuple[List[Path], Path]:
-    """
-    Supports two modes:
-
-    1. Explicit:
-       --train_files file1.tsv,file2.tsv --test_file test.tsv
-
-    2. Directory:
-       --data_dir data --test_file data/hipe2020/fr/test.tsv
-       Then all .tsv under data_dir except test_file are used for training.
-    """
-
-    explicit_train_files = parse_file_list(train_files_arg)
-
-    test_file = Path(test_file_arg)
-
-    if explicit_train_files:
-        train_files = explicit_train_files
-
-        if not test_file.exists():
-            raise FileNotFoundError(f"Test file does not exist: {test_file}")
-
-        for p in train_files:
-            if not p.exists():
-                raise FileNotFoundError(f"Train file does not exist: {p}")
-
-        return train_files, test_file
-
-    if not data_dir:
-        raise ValueError("You must provide either --train_files or --data_dir.")
-
-    data_dir_path = Path(data_dir)
-
-    if not data_dir_path.exists():
-        raise FileNotFoundError(f"Data directory does not exist: {data_dir_path}")
-
-    all_tsvs = sorted(data_dir_path.rglob("*.tsv"))
-
-    if not all_tsvs:
-        raise FileNotFoundError(f"No .tsv files found under {data_dir_path}")
-
-    test_file_str = str(test_file_arg)
-
-    matching_test_files = [
-        p
-        for p in all_tsvs
-        if p.name == Path(test_file_str).name
-        or str(p).endswith(test_file_str)
-        or p.resolve() == Path(test_file_str).resolve()
-    ]
-
-    if not matching_test_files:
-        raise FileNotFoundError(
-            f"Could not find test file {test_file_arg} under {data_dir_path}"
-        )
-
-    resolved_test_file = matching_test_files[0]
-    train_files = [p for p in all_tsvs if p != resolved_test_file]
-
-    return train_files, resolved_test_file
-
-
-def load_dataset(
-    data_dir: Optional[str],
-    train_files: Optional[str],
-    test_file: str,
-    label_column: str,
-    keep_scope: bool = False,
-):
-    train_paths, test_path = resolve_train_test_files(
-        data_dir=data_dir,
-        train_files_arg=train_files,
-        test_file_arg=test_file,
-    )
-
-    print("=" * 80)
-    print("DATASET FILES")
-    print("=" * 80)
-    print("Test file:", test_path)
-    print("Train files:")
-    for p in train_paths:
-        print(" -", p)
-
-    train_examples = []
-
-    for p in train_paths:
-        train_examples.extend(
-            read_hipe_tsv(
-                p,
-                label_column=label_column,
-                keep_scope=keep_scope,
-            )
-        )
-
-    test_examples = read_hipe_tsv(
-        test_path,
-        label_column=label_column,
-        keep_scope=keep_scope,
-    )
-
-    print("=" * 80)
-    print("DATASET SIZE")
-    print("=" * 80)
-    print("Train examples:", len(train_examples))
-    print("Test examples:", len(test_examples))
-
-    return train_examples, test_examples, train_paths, test_path
-
-
 # -------------------------
-# BIO <-> span conversion
+# BIO to GLiNER spans
 # -------------------------
 
 
 def bio_to_spans(labels: List[str]) -> List[Tuple[int, int, str]]:
-    """
-    Convert BIO labels to inclusive token spans:
-      (start_token, end_token, entity_type)
-    """
-
     spans = []
     start = None
     ent_type = None
@@ -422,15 +393,6 @@ def bio_to_spans(labels: List[str]) -> List[Tuple[int, int, str]]:
 
 
 def hipe_example_to_gliner(example: Dict) -> Optional[Dict]:
-    """
-    Convert sentence-level HIPE example to GLiNER training format:
-
-    {
-      "tokenized_text": ["Charlotte", "née", "Bourgoin"],
-      "ner": [[0, 2, "person"]]
-    }
-    """
-
     tokens = example["tokens"]
     labels = example["labels"]
 
@@ -483,7 +445,7 @@ def print_dataset_stats(examples: List[Dict], title: str):
 
 
 # -------------------------
-# Text reconstruction for evaluation
+# Evaluation utilities
 # -------------------------
 
 
@@ -585,11 +547,6 @@ def predicted_entities_to_bio(
     return labels
 
 
-# -------------------------
-# Evaluation
-# -------------------------
-
-
 @torch.no_grad()
 def evaluate_gliner(
     model,
@@ -653,7 +610,7 @@ def evaluate_gliner(
 
 
 # -------------------------
-# Generic training wrapper
+# GLiNER training
 # -------------------------
 
 
@@ -664,23 +621,14 @@ def train_with_gliner_api(
     output_dir: Path,
     args,
 ):
-    """
-    GLiNER's training API has changed across versions.
-
-    This function first tries the common GLiNER Trainer API.
-    If your installed GLiNER version differs, the script will fail here,
-    but all dataset conversion files will already be saved.
-    """
-
     try:
         from gliner.data_processing.collator import DataCollator
         from gliner.training import Trainer, TrainingArguments
     except Exception as e:
         raise ImportError(
             "Could not import GLiNER training classes. "
-            "Your installed gliner version may have a different training API. "
-            "The converted train/dev/test JSON files were saved, so you can still "
-            "use them with the GLiNER official fine-tuning script."
+            "The converted train/dev/test JSON files were saved, so you can use them "
+            "with the official GLiNER fine-tuning script if needed."
         ) from e
 
     data_collator = DataCollator(
@@ -738,45 +686,50 @@ def train_with_gliner_api(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Fine-tune ChronoGLiNER on a configurable HIPE-style TSV dataset."
-    )
-
-    # Dataset arguments
-    parser.add_argument(
-        "--data_dir",
-        type=str,
-        default=None,
-        help="Directory containing .tsv files. Used if --train_files is not provided.",
+        description="Fine-tune ChronoGLiNER on HIPE-style historical NER data."
     )
 
     parser.add_argument(
-        "--train_files",
+        "--data_root",
+        type=str,
+        default="data",
+        help="Root data directory.",
+    )
+
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        required=True,
+        help="Dataset folder under data_root, e.g. hipe2020, hipe2022.",
+    )
+
+    parser.add_argument(
+        "--language",
         type=str,
         default=None,
-        help="Comma-separated list of training TSV files. Overrides --data_dir training discovery.",
+        help="Optional language subfolder, e.g. fr, de, en.",
     )
 
     parser.add_argument(
         "--test_file",
         type=str,
-        required=True,
-        help="Path to the test TSV file.",
+        default=None,
+        help="Optional test file name/path. If omitted, the script searches for a file containing 'test'.",
     )
 
     parser.add_argument(
         "--label_column",
         type=str,
         default=DEFAULT_LABEL_COLUMN,
-        help="TSV column to use as NER labels.",
+        help="TSV column to use as gold NER labels.",
     )
 
     parser.add_argument(
         "--keep_scope",
         action="store_true",
-        help="Keep scope labels instead of mapping them to O. Not used by default labels.",
+        help="Keep scope labels instead of mapping them to O.",
     )
 
-    # Model arguments
     parser.add_argument(
         "--model_name",
         type=str,
@@ -796,7 +749,6 @@ def main():
         help="Comma-separated GLiNER labels used at evaluation.",
     )
 
-    # Training arguments
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--batch_size", type=int, default=4)
@@ -809,14 +761,7 @@ def main():
         "--dev_size",
         type=float,
         default=0.1,
-        help="Fraction of training examples used as dev if --dev_files is not provided.",
-    )
-
-    parser.add_argument(
-        "--dev_files",
-        type=str,
-        default=None,
-        help="Optional comma-separated dev TSV files.",
+        help="Fraction of training examples used as dev.",
     )
 
     parser.add_argument(
@@ -828,7 +773,6 @@ def main():
 
     parser.add_argument("--fp16", action="store_true")
 
-    # Hub upload
     parser.add_argument(
         "--push_to_hub",
         action="store_true",
@@ -856,40 +800,57 @@ def main():
     print("ChronoGLiNER fine-tuning")
     print("=" * 80)
     print("Model:", args.model_name)
+    print("Dataset:", args.dataset)
+    print("Language:", args.language)
+    print("Data root:", args.data_root)
     print("Output dir:", output_dir)
     print("Label column:", args.label_column)
     print("Eval labels:", eval_labels)
 
-    train_raw, test_raw, train_paths, test_path = load_dataset(
-        data_dir=args.data_dir,
-        train_files=args.train_files,
+    train_paths, test_path = resolve_train_test_files_from_dataset(
+        data_root=args.data_root,
+        dataset=args.dataset,
+        language=args.language,
         test_file=args.test_file,
+    )
+
+    train_raw = []
+
+    for p in train_paths:
+        train_raw.extend(
+            read_hipe_tsv(
+                p,
+                label_column=args.label_column,
+                keep_scope=args.keep_scope,
+            )
+        )
+
+    test_raw = read_hipe_tsv(
+        test_path,
         label_column=args.label_column,
         keep_scope=args.keep_scope,
     )
 
-    if args.dev_files:
-        dev_paths = parse_file_list(args.dev_files)
+    print("=" * 80)
+    print("DATASET FILES")
+    print("=" * 80)
+    print("Test file:", test_path)
+    print("Train files:")
+    for p in train_paths:
+        print(" -", p)
 
-        dev_raw = []
-        for p in dev_paths:
-            dev_raw.extend(
-                read_hipe_tsv(
-                    p,
-                    label_column=args.label_column,
-                    keep_scope=args.keep_scope,
-                )
-            )
+    print("=" * 80)
+    print("DATASET SIZE")
+    print("=" * 80)
+    print("Train examples:", len(train_raw))
+    print("Test examples:", len(test_raw))
 
-        train_split_raw = train_raw
-        dev_split_raw = dev_raw
-    else:
-        train_split_raw, dev_split_raw = train_test_split(
-            train_raw,
-            test_size=args.dev_size,
-            random_state=args.seed,
-            shuffle=True,
-        )
+    train_split_raw, dev_split_raw = train_test_split(
+        train_raw,
+        test_size=args.dev_size,
+        random_state=args.seed,
+        shuffle=True,
+    )
 
     train_gliner = convert_examples_to_gliner(train_split_raw)
     dev_gliner = convert_examples_to_gliner(dev_split_raw)
@@ -910,15 +871,18 @@ def main():
 
     metadata = {
         "model_name": args.model_name,
+        "dataset": args.dataset,
+        "language": args.language,
+        "data_root": args.data_root,
         "label_column": args.label_column,
         "train_files": [str(p) for p in train_paths],
         "test_file": str(test_path),
-        "dev_files": args.dev_files,
         "labels": eval_labels,
         "epochs": args.epochs,
         "batch_size": args.batch_size,
         "learning_rate": args.learning_rate,
         "threshold": args.threshold,
+        "dev_size": args.dev_size,
     }
 
     with (output_dir / "run_metadata.json").open("w", encoding="utf-8") as f:
