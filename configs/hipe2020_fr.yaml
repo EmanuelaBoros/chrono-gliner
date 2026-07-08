@@ -6,6 +6,7 @@ data:
   test_file: null
   dev_size: 0.1
   keep_scope: false
+  drop_empty_examples: true
 
 model:
   model_name: urchade/gliner_medium-v2.1
@@ -19,17 +20,13 @@ model:
 training:
   output_dir: outputs/chronogliner_ft_hipe2020_fr
   seed: 42
-  max_steps: 3000
-  per_device_train_batch_size: 4
-  learning_rate: 0.000005
-  eval_strategy: epoch
-  save_steps: 500
-  warmup_ratio: 0.1
-  weight_decay: 0.01
-  threshold: 0.5
-  fp16: true
+  max_steps: 1500
+  per_device_train_batch_size: 2
+  learning_rate: 0.000003
+  threshold: 0.35
+  fp16: false
   bf16: false
 
 hub:
   push_to_hub: false
-  hub_model_id: emanuelaboros/chrono-gliner-ft-fr
+  hub_model_id: emanuelaboros/chrono-gliner-ft-hipe2020-fr

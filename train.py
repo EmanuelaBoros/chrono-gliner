@@ -377,30 +377,31 @@ def hipe_example_to_gliner(example: Dict) -> Optional[Dict]:
     }
 
 
-def convert_to_gliner(examples: List[Dict]) -> List[Dict]:
+def convert_to_gliner(
+    examples: List[Dict],
+    drop_empty_examples: bool = False,
+) -> List[Dict]:
     converted = []
+    dropped_empty = 0
 
     for ex in examples:
         item = hipe_example_to_gliner(ex)
-        if item is not None:
-            converted.append(item)
+
+        if item is None:
+            continue
+
+        if drop_empty_examples and len(item["ner"]) == 0:
+            dropped_empty += 1
+            continue
+
+        converted.append(item)
+
+    print(
+        f"Converted {len(converted)} examples "
+        f"(dropped empty-entity examples: {dropped_empty})"
+    )
 
     return converted
-
-
-def print_stats(examples: List[Dict], title: str):
-    counter = Counter()
-
-    for ex in examples:
-        for _, _, label in ex["ner"]:
-            counter[label] += 1
-
-    print("=" * 80)
-    print(title)
-    print("=" * 80)
-    print("Examples:", len(examples))
-    for label, count in counter.most_common():
-        print(f"{label}\t{count}")
 
 
 # ---------------------------------------------------------------------
@@ -560,6 +561,24 @@ def evaluate(
 # ---------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------
+def print_stats(examples: List[Dict], title: str):
+    counter = Counter()
+
+    for ex in examples:
+        for _, _, label in ex["ner"]:
+            counter[label] += 1
+
+    print("=" * 80)
+    print(title)
+    print("=" * 80)
+    print("Examples:", len(examples))
+
+    if not counter:
+        print("No entities found.")
+        return
+
+    for label, count in counter.most_common():
+        print(f"{label}\t{count}")
 
 
 def main():
@@ -631,9 +650,30 @@ def main():
         shuffle=True,
     )
 
-    train_data = convert_to_gliner(train_split_raw)
-    eval_data = convert_to_gliner(dev_split_raw)
-    test_gliner = convert_to_gliner(test_raw)
+    drop_empty_examples = bool(data_cfg.get("drop_empty_examples", True))
+
+    train_data = convert_to_gliner(
+        train_split_raw,
+        drop_empty_examples=drop_empty_examples,
+    )
+
+    eval_data = convert_to_gliner(
+        dev_split_raw,
+        drop_empty_examples=drop_empty_examples,
+    )
+
+    # For saved inspection only. Final evaluation still uses test_raw,
+    # so test examples without entities are preserved in the real evaluation.
+    test_gliner = convert_to_gliner(
+        test_raw,
+        drop_empty_examples=False,
+    )
+
+    if not train_data:
+        raise ValueError("No training examples left after conversion.")
+
+    if not eval_data:
+        raise ValueError("No dev examples left after conversion.")
 
     print_stats(train_data, "TRAIN GLiNER DATA")
     print_stats(eval_data, "DEV GLiNER DATA")
@@ -679,12 +719,18 @@ def main():
         "train_dataset": train_data,
         "eval_dataset": eval_data,
         "output_dir": str(output_dir / "model"),
-        "max_steps": int(train_cfg.get("max_steps", 3000)),
+        "max_steps": int(train_cfg.get("max_steps", 1500)),
         "per_device_train_batch_size": int(
-            train_cfg.get("per_device_train_batch_size", 4)
+            train_cfg.get("per_device_train_batch_size", 2)
         ),
-        "learning_rate": float(train_cfg.get("learning_rate", 5e-6)),
+        "learning_rate": float(train_cfg.get("learning_rate", 3e-6)),
     }
+
+    if bool(train_cfg.get("fp16", False)):
+        train_kwargs["fp16"] = True
+
+    if bool(train_cfg.get("bf16", False)):
+        train_kwargs["bf16"] = True
 
     if "eval_every" in train_cfg:
         train_kwargs["eval_every"] = int(train_cfg["eval_every"])
