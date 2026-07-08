@@ -753,12 +753,24 @@ def main():
     model.train_model(**train_kwargs)
 
     model_dir = output_dir / "model"
+    model_dir.mkdir(parents=True, exist_ok=True)
 
     print("=" * 80)
-    print("Reloading fine-tuned model")
+    print("Saving fine-tuned model")
     print("=" * 80)
 
-    ft_model = GLiNER.from_pretrained(str(model_dir))
+    try:
+        model.save_pretrained(str(model_dir))
+        print("Saved model to:", model_dir)
+    except Exception as e:
+        print("Warning: could not save with save_pretrained:")
+        print(e)
+
+    print("=" * 80)
+    print("Using trained model for evaluation")
+    print("=" * 80)
+
+    ft_model = model
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     ft_model.to(device)
