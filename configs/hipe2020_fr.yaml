@@ -20,7 +20,7 @@ model:
 training:
   output_dir: outputs/chronogliner_ft_hipe2020_fr
   seed: 42
-  max_steps: 1500
+  max_steps: 7000
   per_device_train_batch_size: 2
   learning_rate: 0.000003
   threshold: 0.35
