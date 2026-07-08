@@ -31,7 +31,7 @@ The first goal is to compare several zero-shot and prompt-based GLiNER variants 
 | Variant | Name | Description | Threshold | Precision | Recall | F1 | Status |
 |---|---|---|---:|---:|---:|---:|---|
 | Zero-shot | `ChronoGLiNER-ZS` | GLiNER used directly with simple labels | 0.50 | 0.3082 | 0.4921 | 0.3790 | Best simple-label result |
-| Descriptive labels | `ChronoGLiNER-D` | GLiNER with richer historical label descriptions | 0.35 | **0.4574** | 0.3855 | **0.4184** | Best prompt-only result with French historical labels |
-| Fine-tuned | `ChronoGLiNER-FT` | GLiNER fine-tuned on HIPE `NE-COARSE-LIT` | TBD | TBD | TBD | TBD | Running / next |
+| Descriptive labels | `ChronoGLiNER-D` | GLiNER with richer historical label descriptions | 0.35 | **0.4574** | 0.3855 | 0.4184 | Best prompt-only result with French historical labels |
+| Fine-tuned | `ChronoGLiNER-FT` | GLiNER fine-tuned on HIPE `NE-COARSE-LIT` | 0.35 | 0.4019 | **0.6833** | **0.5061** | First successful fine-tuned run |
 | Teacher model | `ChronoGLiNER-Teacher` | Fine-tuned GLiNER used to pseudo-label more historical data | TBD | TBD | TBD | TBD | Planned |
 | Student model | `ChronoGLiNER-BERT` | Historical BERT trained on gold + GLiNER pseudo-labels | TBD | TBD | TBD | TBD | Planned |
