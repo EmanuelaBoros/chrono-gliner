@@ -607,7 +607,7 @@ def main():
     )
 
     print("=" * 80)
-    print("ChronoGLiNER fine-tuning")
+    print("HistoricalGLiNER fine-tuning")
     print("=" * 80)
     print("Config:", args.config)
     print("Model:", model_cfg["model_name"])
@@ -787,7 +787,7 @@ def main():
     )
 
     print("=" * 80)
-    print("ChronoGLiNER-FT TEST RESULTS")
+    print("HistoricalGLiNER-FT TEST RESULTS")
     print("=" * 80)
     print("Precision:", metrics["precision"])
     print("Recall:", metrics["recall"])
