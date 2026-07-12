@@ -441,7 +441,7 @@ def main():
     parser.add_argument(
         "--output_dir",
         type=str,
-        default="outputs/chronogliner_hipe",
+        default="outputs/historicalgliner_hipe",
     )
 
     parser.add_argument(
@@ -467,7 +467,7 @@ def main():
     thresholds = [float(x.strip()) for x in args.thresholds.split(",") if x.strip()]
 
     print("=" * 80)
-    print("ChronoGLiNER evaluation")
+    print("HistoricalGLiNER evaluation")
     print("=" * 80)
     print("Test file:", test_file)
     print("Model:", args.model_name)
