@@ -1,6 +1,6 @@
 # HistoricalGLiNER: Label-aware and temporally adapted NER for historical documents
 
-**ChronoGLiNER** is an experimental label-aware named entity recognition system for historical documents.
+**HistoricalGLiNER** is an experimental label-aware named entity recognition system for historical documents.
 
 It evaluates GLiNER-style open-label NER on HIPE-style historical newspaper data. Instead of training only fixed BIO tags, ChronoGLiNER uses semantic label prompts such as `person`, `historical place`, `administrative institution`, or `date expression`.
 
